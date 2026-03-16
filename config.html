@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Configurações</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+  <script src="./firestore-sync.js"></script>
+</head>
+<body style="display:none">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>
+          <h1>PlateEye</h1>
+          <p id="userEmail">—</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+  <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+  <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+  <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+  <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+  <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+  <a href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+  <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+  <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+</nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" type="button" onclick="toggleSidebar()"><span>☰</span></button>
+          <div>
+            <h2>Configurações</h2>
+            <div class="subtle">Preferências do operador e integridade do dispositivo</div>
+          </div>
+        </div>
+        <div class="right">
+          <button id="conn" class="pill">Conectando...</button>
+        </div>
+      </header>
+
+      <div class="dashboard-shell">
+        <section class="card pad" style="margin-bottom:14px;">
+          <div class="section-head">
+            <div>
+              <h3>Preferências</h3>
+              <div class="subtle">Notificação, som e parâmetros do operador</div>
+            </div>
+          </div>
+
+          <form id="configForm" class="form-grid">
+            <div>
+              <label class="subtle" for="operatorName">Nome do operador</label>
+              <input id="operatorName" class="input" type="text" placeholder="Ex.: Supervisor operacional"/>
+            </div>
+
+            <div>
+              <label class="subtle" for="notificationMode">Notificações</label>
+              <select id="notificationMode">
+                <option value="all">Receber todas</option>
+                <option value="critical">Somente críticas</option>
+                <option value="off">Desativar interface local</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="subtle" for="soundEnabled">Alerta sonoro</label>
+              <select id="soundEnabled">
+                <option value="true">Ativado</option>
+                <option value="false">Desativado</option>
+              </select>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn primary">Salvar preferências</button>
+              <button type="button" class="btn secondary" id="btnPush">Registrar push novamente</button>
+            </div>
+          </form>
+
+          <div id="configStatus" class="helper-text" style="margin-top:12px;">
+            Aguardando alterações.
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="section-head">
+            <div>
+              <h3>Diagnóstico</h3>
+              <div class="subtle">Validação do ambiente local e da sessão</div>
+            </div>
+          </div>
+
+          <div class="panel-list">
+            <div class="panel-item">
+              <div>
+                <p class="title">Usuário autenticado</p>
+                <div class="desc" id="diagUser">—</div>
+              </div>
+              <div class="tag ok"><span class="dot"></span></div>
+            </div>
+
+            <div class="panel-item">
+              <div>
+                <p class="title">Serviços</p>
+                <div class="desc" id="diagSw">Verificando...</div>
+              </div>
+              <div class="tag ok"><span class="dot"></span></div>
+            </div>
+
+            <div class="panel-item">
+              <div>
+                <p class="title">Permissão de notificação</p>
+                <div class="desc" id="diagNotification">Verificando...</div>
+              </div>
+              <div class="tag ok"><span class="dot"></span></div>
+            </div>
+
+            <div class="panel-item">
+              <div>
+                <p class="title">Token local</p>
+                <div class="desc" id="diagToken">Verificando...</div>
+              </div>
+              <div class="tag ok"><span class="dot"></span></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    async function loadPreferences(user) {
+      try {
+        const doc = await window.db.collection('users').doc(user.uid).get();
+        const data = doc.data()?.preferences || {};
+
+        document.getElementById('operatorName').value = data.operatorName || '';
+        document.getElementById('notificationMode').value = data.notificationMode || 'all';
+        document.getElementById('soundEnabled').value = String(
+          typeof data.soundEnabled === 'boolean' ? data.soundEnabled : true
+        );
+      } catch (error) {
+        console.error('[Config] Erro ao carregar preferências:', error);
+      }
+    }
+
+    function loadDiagnostics(user) {
+      document.getElementById('diagUser').textContent = user.email || 'Operador';
+      document.getElementById('diagSw').textContent = 'serviceWorker' in navigator ? 'Disponível no navegador' : 'Não suportado';
+      document.getElementById('diagNotification').textContent = Notification.permission || 'default';
+      document.getElementById('diagToken').textContent = localStorage.getItem('plateeye_fcm_token') ? 'Token presente' : 'Token ausente';
+    }
+
+    async function savePreferences(user, event) {
+      event.preventDefault();
+
+      const payload = {
+        operatorName: document.getElementById('operatorName').value.trim(),
+        notificationMode: document.getElementById('notificationMode').value,
+        soundEnabled: document.getElementById('soundEnabled').value === 'true'
+      };
+
+      try {
+        await window.firestoreSync.saveUserPreferences(user.uid, payload);
+        document.getElementById('configStatus').textContent = 'Preferências salvas com sucesso.';
+      } catch (error) {
+        console.error('[Config] Erro ao salvar:', error);
+        document.getElementById('configStatus').textContent = 'Falha ao salvar preferências.';
+      }
+    }
+
+    async function initPage(user) {
+      document.getElementById('userEmail').textContent = user.email || 'Operador';
+      document.body.style.display = 'block';
+
+      await window.requestPushPermissionAndToken();
+      window.startForegroundNotifications();
+
+      await loadPreferences(user);
+      loadDiagnostics(user);
+
+      document.getElementById('configForm').addEventListener('submit', (event) => savePreferences(user, event));
+
+      document.getElementById('btnPush').addEventListener('click', async () => {
+        const token = await window.requestPushPermissionAndToken();
+        document.getElementById('configStatus').textContent = token
+          ? 'Push registrado novamente com sucesso.'
+          : 'Não foi possível registrar o push.';
+        loadDiagnostics(user);
+      });
+
+      document.getElementById('conn').textContent = '✓ Online';
+    }
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = './login.html';
+        return;
+      }
+      initPage(user);
+    });
+  </script>
+</body>
+</html>

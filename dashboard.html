@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="theme-color" content="#22A2FF"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <title>Dashboard - Zecure</title>
+  <link rel="stylesheet" href="/css/premium.css"/>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <style>
+    :root { --primary: #22A2FF; --bg: #0A0F1E; --card: #161A33; }
+    .modal-img{position:fixed;inset:0;background:rgba(0,0,0,.98);display:none;align-items:center;justify-content:center;z-index:3000}.modal-img.active{display:flex}.modal-img img{width:100%;height:100%;object-fit:contain}.modal-img .close-btn{position:absolute;top:30px;right:30px;background:var(--primary);border:none;color:#fff;width:50px;height:50px;border-radius:50%;cursor:pointer;font-size:28px;display:flex;align-items:center;justify-content:center;z-index:3001}.alert-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:15px;margin-top:15px}.alert-card{background:var(--card);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:12px;transition:0.2s}.alert-card:hover{border-color:var(--primary)}.alert-card img{width:100%;height:160px;object-fit:cover;border-radius:8px;cursor:pointer}.alert-card .plate{font-weight:700;font-size:18px;color:var(--primary);margin:10px 0}.alert-card .info{font-size:12px;color:#A9B6D3;margin:4px 0}.alert-card .btn{width:100%;padding:10px;background:var(--primary);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;margin-top:10px}
+  </style>
+</head>
+<body style="display:none">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><h1>Zecure</h1><p id="userEmail">—</p></div>
+      <nav class="nav">
+  <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+  <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+  <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+  <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+  <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+  <a href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+  <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+  <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+</nav>
+    </aside>
+    <main class="content">
+      <header class="topbar">
+        <div><h2>Dashboard Operacional</h2><div class="subtle">LPR em tempo real</div></div>
+        <div class="right"><button id="conn" class="pill">Conectando...</button></div>
+      </header>
+      <section class="grid">
+        <div>
+          <div class="kpis">
+            <div class="card kpi"><div class="label">Eventos Hoje</div><div id="kpiToday" class="value">0</div></div>
+            <div class="card kpi mag"><div class="label">Alertas Abertos</div><div id="kpiAlerts" class="value">0</div></div>
+            <div class="card kpi teal"><div class="label">Câmeras</div><div id="kpiCams" class="value">0</div></div>
+            <div class="card kpi"><div class="label">Monitoradas</div><div id="kpiMon" class="value">0</div></div>
+          </div>
+          <div class="card pad">
+            <h3>Últimos 10 Eventos</h3>
+            <table class="table">
+              <thead><tr><th>Placa</th><th>Câmera</th><th>Horário</th><th>Status</th></tr></thead>
+              <tbody id="evTbody"><tr><td colspan="4">Aguardando dados...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <aside class="card alerts">
+          <h3>Alertas Ativos</h3>
+          <div id="alertList" class="alert-grid"></div>
+        </aside>
+      </section>
+    </main>
+  </div>
+  <div id="imgModal" class="modal-img">
+    <button class="close-btn" onclick="closeModal()">✕</button>
+    <img id="modalImg" src=""/>
+  </div>
+  <script>
+    let allEvents = []; let lastAlertCount = 0;
+    const siren = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+
+    function logout() { firebase.auth().signOut().then(() => location.href='/login.html'); }
+    function openModal(url) { if(!url) return; document.getElementById('modalImg').src=url; document.getElementById('imgModal').classList.add('active'); }
+    function closeModal() { document.getElementById('imgModal').classList.remove('active'); }
+
+    function notify(msg) {
+        if (Notification.permission === "granted") new Notification("Zecure LPR", { body: msg });
+        siren.play().catch(() => console.log("Interação necessária para som"));
+    }
+
+    function render() {
+        // 1. Ordenar e Filtrar Eventos (Últimos 10)
+        const sorted = [...allEvents].sort((a,b) => (b.cloud_created_at?.toMillis() || 0) - (a.cloud_created_at?.toMillis() || 0));
+        const tbody = document.getElementById('evTbody');
+        tbody.innerHTML = sorted.slice(0, 10).map(ev => `
+            <tr>
+                <td style="color:#22A2FF;font-weight:700;cursor:pointer" onclick="openModal('${ev.image_url}')">${ev.plate}</td>
+                <td>${ev.camera_name}</td>
+                <td>${ev.captured_at ? ev.captured_at.split('T')[1].substring(0,8) : '—'}</td>
+                <td><span class="tag ${ev.is_monitored ? 'alert' : 'ok'}">${ev.is_monitored ? 'ALERTA' : 'OK'}</span></td>
+            </tr>
+        `).join('');
+
+        // 2. KPI Hoje
+        const startOfDay = new Date().setHours(0,0,0,0);
+        const todayCount = allEvents.filter(ev => (ev.cloud_created_at?.toMillis() || 0) >= startOfDay).length;
+        document.getElementById('kpiToday').textContent = todayCount;
+    }
+
+    async function init() {
+        if (!window.db) return setTimeout(init, 500);
+        const user = firebase.auth().currentUser;
+        if (!user) return location.href='/login.html';
+        
+        document.getElementById('userEmail').textContent = user.email;
+        document.body.style.display = 'block';
+        if (Notification.permission !== "granted") Notification.requestPermission();
+
+        // Listeners Real-time
+        window.db.collection('events').onSnapshot(snap => {
+            allEvents = snap.docs.map(d => d.data());
+            render();
+            document.getElementById('conn').textContent = "✓ Online";
+        });
+        window.db.collection('events').onSnapshot(snap => {
+  allEvents = snap.docs.map(d => d.data());
+  console.log('[Events] Total carregado:', allEvents.length);
+  console.log('[Events] Primeiro evento:', allEvents[0]);
+  render();
+  document.getElementById('conn').textContent = "✓ Online";
+});
+
+        window.db.collection('alerts').where('is_read', '==', false).onSnapshot(snap => {
+            const alerts = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => (b.cloud_created_at?.toMillis() || 0) - (a.cloud_created_at?.toMillis() || 0));
+            
+            if (alerts.length > lastAlertCount && lastAlertCount !== 0) notify("Nova placa monitorada detectada!");
+            lastAlertCount = alerts.length;
+
+            document.getElementById('kpiAlerts').textContent = alerts.length;
+            document.getElementById('alertList').innerHTML = alerts.map(a => `
+                <div class="alert-card">
+                    <img src="${a.image_url}" onclick="openModal('${a.image_url}')">
+                    <div class="plate">${a.plate}</div>
+                    <div class="info">📍 ${a.camera_name}</div>
+                    <div class="info">📝 ${a.note || 'Monitoramento'}</div>
+                    <button class="btn" onclick="markRead('${a.id}')">MARCAR LIDO</button>
+                </div>
+            `).join('');
+        });
+
+        window.db.collection('cameras').onSnapshot(snap => document.getElementById('kpiCams').textContent = snap.size);
+        window.db.collection('monitoring').onSnapshot(snap => document.getElementById('kpiMon').textContent = snap.size);
+    }
+
+    async function markRead(id) { await window.db.collection('alerts').doc(id).update({is_read: true}); }
+
+    firebase.auth().onAuthStateChanged(init);
+  </script>
+</body>
+</html>

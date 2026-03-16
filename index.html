@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Dashboard</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+  <script src="./firestore-sync.js"></script>
+</head>
+<body style="display:none">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>
+          <h1>PlateEye</h1>
+          <p id="userEmail">—</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+        <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+        <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+        <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+        <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+        <a href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+        <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+        <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" type="button" onclick="toggleSidebar()">
+            <span>☰</span>
+          </button>
+          <div>
+            <h2>Dashboard Operacional</h2>
+            <div class="subtle">Situação tática em tempo real</div>
+          </div>
+        </div>
+
+        <div class="right">
+          <button id="conn" class="pill">Conectando...</button>
+        </div>
+      </header>
+
+      <div class="dashboard-shell">
+        <section class="kpis">
+          <div class="card kpi">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div>
+                <div class="label">Eventos Hoje</div>
+                <div id="kpiToday" class="value">0</div>
+                <div class="chip">Atualização manual</div>
+              </div>
+              <button id="btnRefreshToday" class="btn primary" type="button" onclick="updateTodayCountManual()">Atualizar</button>
+            </div>
+            <div id="todayStatus" class="subtle" style="margin-top:10px;"></div>
+          </div>
+
+          <a class="kpi-link" href="./alerts.html">
+            <div class="card kpi mag">
+              <div class="label">Alertas Abertos</div>
+              <div id="kpiAlerts" class="value">0</div>
+              <div class="chip">Fila crítica</div>
+            </div>
+          </a>
+
+          <a class="kpi-link" href="./cameras.html">
+            <div class="card kpi teal">
+              <div class="label">Câmeras</div>
+              <div id="kpiCams" class="value">0</div>
+              <div class="chip">Inventário</div>
+            </div>
+          </a>
+
+          <a class="kpi-link" href="./monitoring.html">
+            <div class="card kpi">
+              <div class="label">Monitoradas</div>
+              <div id="kpiMon" class="value">0</div>
+              <div class="chip">Lista sensível</div>
+            </div>
+          </a>
+        </section>
+
+        <section class="grid">
+          <div class="card pad">
+            <div class="section-head">
+              <div>
+                <h3>Últimos Eventos</h3>
+                <div class="subtle">Feed em tempo real. Independente do KPI diário.</div>
+              </div>
+            </div>
+
+            <div id="eventsFeed" class="events-feed">
+              <div class="empty-state">Aguardando eventos...</div>
+            </div>
+          </div>
+
+          <aside class="card alerts">
+            <div class="section-head">
+              <div>
+                <h3>Alertas Ativos</h3>
+                <div class="subtle">Ocorrências abertas com prioridade de tratamento</div>
+              </div>
+              <a href="./alerts.html" class="btn secondary">Abrir painel</a>
+            </div>
+
+            <div id="alertList" class="alert-grid">
+              <div class="empty-state">Aguardando alertas...</div>
+            </div>
+          </aside>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="imgModal" class="modal-img" onclick="handleModalBackdrop(event)">
+    <button class="close-btn" type="button" onclick="closeModal()">✕</button>
+    <img id="modalImg" src="" alt="Visualização da captura"/>
+  </div>
+
+  <script>
+    let allEvents = [];
+    let activeAlerts = [];
+    let lastAlertCount = 0;
+    let deferredInstallPrompt = null;
+    let dashboardInitialized = false;
+    let isUpdatingToday = false;
+
+    const siren = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    function logout() {
+      firebase.auth().signOut().then(() => {
+        location.href = './login.html';
+      });
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '—';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatDateTime(value) {
+      if (!value) return '—';
+
+      try {
+        let date = null;
+
+        if (typeof value?.toDate === 'function') {
+          date = value.toDate();
+        } else if (typeof value === 'string' || typeof value === 'number') {
+          date = new Date(value);
+        }
+
+        if (!date || isNaN(date.getTime())) return String(value);
+
+        return date.toLocaleString('pt-BR', {
+          dateStyle: 'short',
+          timeStyle: 'medium'
+        });
+      } catch {
+        return '—';
+      }
+    }
+
+    function isAlertOpen(item) {
+      if (typeof item.isRead !== 'undefined') return item.isRead === false;
+      if (typeof item.is_read !== 'undefined') return item.is_read === false;
+      return true;
+    }
+
+    function isMonitored(item) {
+      if (typeof item.is_monitored !== 'undefined') return !!item.is_monitored;
+      if (typeof item.isMonitored !== 'undefined') return !!item.isMonitored;
+      return false;
+    }
+
+    function openModal(url) {
+      if (!url) return;
+      document.getElementById('modalImg').src = url;
+      document.getElementById('imgModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('imgModal').classList.remove('active');
+      document.getElementById('modalImg').src = '';
+    }
+
+    function handleModalBackdrop(event) {
+      if (event.target.id === 'imgModal') closeModal();
+    }
+
+    function notifyLocal(message) {
+      if (Notification.permission === 'granted') {
+        new Notification('PlateEye', {
+          body: message,
+          icon: './icon-192.png'
+        });
+      }
+
+      siren.play().catch(() => {});
+    }
+
+    function renderEvents() {
+      const feed = document.getElementById('eventsFeed');
+
+      const sorted = [...allEvents].sort((a, b) => {
+        const at = a.cloud_created_at?.toMillis?.() || new Date(a.captured_at || 0).getTime() || 0;
+        const bt = b.cloud_created_at?.toMillis?.() || new Date(b.captured_at || 0).getTime() || 0;
+        return bt - at;
+      });
+
+      if (!sorted.length) {
+        feed.innerHTML = '<div class="empty-state">Nenhum evento encontrado.</div>';
+        return;
+      }
+
+      feed.innerHTML = sorted.slice(0, 20).map((ev) => {
+        const imageUrl = ev.image_url || ev.imageUrl || '';
+        const plate = escapeHtml(ev.plate || 'Sem placa');
+        const camera = escapeHtml(ev.camera_name || ev.cameraName || ev.name || 'Não informada');
+        const when = escapeHtml(formatDateTime(ev.captured_at || ev.cloud_created_at));
+        const monitored = isMonitored(ev);
+
+        return `
+          <article class="event-card">
+            <div class="event-thumb" ${imageUrl ? `onclick="openModal('${imageUrl}')"` : ''}>
+              ${imageUrl
+                ? `<img src="${imageUrl}" alt="Captura da placa ${plate}">`
+                : `<div class="empty-state" style="height:100%;display:flex;align-items:center;justify-content:center;">Sem imagem</div>`}
+            </div>
+
+            <div class="event-body">
+              <div class="event-top">
+                <h4 class="event-plate">${plate}</h4>
+                <span class="tag ${monitored ? 'alert' : 'ok'}">
+                  <span class="dot"></span>
+                  ${monitored ? 'ALERTA' : 'OK'}
+                </span>
+              </div>
+
+              <div class="event-meta">
+                <div class="meta-box">
+                  <span class="k">Câmera</span>
+                  <span class="v">${camera}</span>
+                </div>
+
+                <div class="meta-box">
+                  <span class="k">Horário</span>
+                  <span class="v">${when}</span>
+                </div>
+              </div>
+
+              <div class="event-actions">
+                ${imageUrl ? `<button class="btn primary" onclick="openModal('${imageUrl}')">Abrir imagem</button>` : ''}
+                <a class="btn secondary" href="./reports.html">Filtrar relatório</a>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    function renderAlerts() {
+      const container = document.getElementById('alertList');
+
+      if (!activeAlerts.length) {
+        container.innerHTML = '<div class="empty-state">Nenhum alerta aberto no momento.</div>';
+        return;
+      }
+
+      container.innerHTML = activeAlerts.slice(0, 10).map((alert) => {
+        const imageUrl = alert.image_url || alert.imageUrl || '';
+        const plate = escapeHtml(alert.plate || 'Sem placa');
+        const camera = escapeHtml(alert.camera_name || alert.cameraName || 'Não informada');
+        const note = escapeHtml(alert.note || 'Ocorrência monitorada');
+        const id = alert.id;
+
+        return `
+          <div class="alert-card">
+            ${imageUrl
+              ? `<img src="${imageUrl}" alt="Alerta ${plate}" onclick="openModal('${imageUrl}')">`
+              : `<div class="empty-state" style="height:190px;display:flex;align-items:center;justify-content:center;">Sem imagem</div>`}
+            <div class="plate">${plate}</div>
+            <div class="info">📍 ${camera}</div>
+            <div class="info">📝 ${note}</div>
+            <button class="btn primary" onclick="markRead('${id}')">Marcar como lido</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function updateTodayCountManual() {
+      if (isUpdatingToday) return;
+
+      isUpdatingToday = true;
+
+      const btn = document.getElementById('btnRefreshToday');
+      const status = document.getElementById('todayStatus');
+
+      btn.disabled = true;
+      btn.textContent = 'Atualizando...';
+      status.textContent = 'Consultando eventos do dia...';
+
+      try {
+        const count = await window.firestoreSync.getTodayEventsCount();
+        document.getElementById('kpiToday').textContent = count;
+        status.textContent = 'Atualizado manualmente agora';
+      } catch (error) {
+        console.error('[Dashboard] Erro ao calcular eventos do dia:', error);
+        status.textContent = 'Falha ao atualizar o KPI diário';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Atualizar';
+        isUpdatingToday = false;
+      }
+    }
+
+    function updateKPIs() {
+      document.getElementById('kpiAlerts').textContent = activeAlerts.length;
+    }
+
+    async function markRead(id) {
+      try {
+        await window.firestoreSync.markAlertAsRead(id);
+      } catch (error) {
+        console.error('[Alert] Erro ao marcar como lido:', error);
+      }
+    }
+
+    function isStandaloneMode() {
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+
+    function wasInstallBannerDismissed() {
+      return localStorage.getItem('plateeye_install_banner_dismissed') === '1';
+    }
+
+    function wasNotificationPromptHandled() {
+      return localStorage.getItem('plateeye_notification_prompt_handled') === '1';
+    }
+
+    function markNotificationPromptHandled() {
+      localStorage.setItem('plateeye_notification_prompt_handled', '1');
+    }
+
+    function showInstallBanner() {
+      if (!deferredInstallPrompt) return;
+      if (document.getElementById('installBanner')) return;
+      if (wasInstallBannerDismissed()) return;
+      if (isStandaloneMode()) return;
+
+      const banner = document.createElement('div');
+      banner.id = 'installBanner';
+      banner.style.cssText = `
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        z-index: 9999;
+        background: linear-gradient(135deg, rgba(30,67,114,.98), rgba(8,16,25,.98));
+        border: 1px solid rgba(255,255,255,.08);
+        border-radius: 18px;
+        box-shadow: 0 18px 50px rgba(0,0,0,.35);
+        padding: 14px;
+        display: grid;
+        gap: 12px;
+      `;
+
+      banner.innerHTML = `
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-weight:900;font-size:14px;color:#fff;">Instalar PlateEye</div>
+            <div style="margin-top:4px;color:rgba(255,255,255,.72);font-size:12px;line-height:1.45;">
+              Instale o app para operação em campo com acesso rápido e melhor experiência de notificação.
+            </div>
+          </div>
+          <button id="dismissInstallBanner" type="button" style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;">✕</button>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button id="installAppBtn" type="button" class="btn primary">Instalar app</button>
+          <button id="laterInstallBtn" type="button" class="btn secondary">Agora não</button>
+        </div>
+      `;
+
+      document.body.appendChild(banner);
+
+      document.getElementById('installAppBtn').addEventListener('click', async () => {
+        try {
+          if (!deferredInstallPrompt) return;
+          deferredInstallPrompt.prompt();
+          const choice = await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt = null;
+          banner.remove();
+
+          if (choice?.outcome === 'accepted') {
+            await showNotificationPermissionModal();
+          }
+        } catch (error) {
+          console.error('[PWA] Erro ao acionar instalação:', error);
+        }
+      });
+
+      const dismiss = () => {
+        localStorage.setItem('plateeye_install_banner_dismissed', '1');
+        banner.remove();
+      };
+
+      document.getElementById('laterInstallBtn').addEventListener('click', dismiss);
+      document.getElementById('dismissInstallBanner').addEventListener('click', dismiss);
+    }
+
+    async function showNotificationPermissionModal() {
+      if (Notification.permission === 'granted') {
+        markNotificationPromptHandled();
+        await window.requestPushPermissionAndToken();
+        return;
+      }
+
+      if (Notification.permission === 'denied') {
+        markNotificationPromptHandled();
+        return;
+      }
+
+      if (document.getElementById('notificationPermissionModal')) return;
+
+      const modal = document.createElement('div');
+      modal.id = 'notificationPermissionModal';
+      modal.style.cssText = `
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: rgba(3,8,14,.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      `;
+
+      modal.innerHTML = `
+        <div style="
+          width:100%;
+          max-width:420px;
+          border-radius:24px;
+          padding:22px;
+          background: linear-gradient(135deg, rgba(30,67,114,.18), rgba(230,178,60,.06)), linear-gradient(180deg, rgba(19,34,52,.98), rgba(14,24,38,.98));
+          border:1px solid rgba(255,255,255,.08);
+          box-shadow:0 20px 60px rgba(0,0,0,.35);
+        ">
+          <div style="font-size:22px;font-weight:900;line-height:1.08;">Ativar notificações operacionais</div>
+          <div style="margin-top:10px;color:var(--muted);font-size:13px;line-height:1.6;">
+            Permita notificações para receber alerta de placa monitorada, ocorrência crítica e atualização tática em tempo real.
+          </div>
+
+          <div style="margin-top:16px;display:grid;gap:10px;">
+            <div class="login-info-box">
+              <strong>Push em segundo plano</strong>
+              <span>Recebimento mesmo com o app minimizado ou fora da tela.</span>
+            </div>
+            <div class="login-info-box">
+              <strong>Resposta operacional</strong>
+              <span>Disparo visual imediato para reduzir tempo de reação.</span>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;">
+            <button id="allowNotificationsBtn" type="button" class="btn primary">Permitir notificações</button>
+            <button id="skipNotificationsBtn" type="button" class="btn secondary">Agora não</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      document.getElementById('allowNotificationsBtn').addEventListener('click', async () => {
+        try {
+          const permission = await Notification.requestPermission();
+          markNotificationPromptHandled();
+
+          if (permission === 'granted') {
+            await window.requestPushPermissionAndToken();
+          }
+        } catch (error) {
+          console.error('[Push] Erro ao solicitar permissão:', error);
+        } finally {
+          modal.remove();
+        }
+      });
+
+      document.getElementById('skipNotificationsBtn').addEventListener('click', () => {
+        markNotificationPromptHandled();
+        modal.remove();
+      });
+    }
+
+    async function bootstrapUserExperience() {
+      if (isStandaloneMode()) {
+        if (!wasNotificationPromptHandled()) {
+          await showNotificationPermissionModal();
+        } else if (Notification.permission === 'granted') {
+          await window.requestPushPermissionAndToken();
+        }
+        return;
+      }
+
+      if (deferredInstallPrompt && !wasInstallBannerDismissed()) {
+        showInstallBanner();
+        return;
+      }
+
+      if (!wasNotificationPromptHandled()) {
+        await showNotificationPermissionModal();
+      } else if (Notification.permission === 'granted') {
+        await window.requestPushPermissionAndToken();
+      }
+    }
+
+    async function initDashboard(user) {
+      if (dashboardInitialized) return;
+      dashboardInitialized = true;
+
+      document.getElementById('userEmail').textContent = user.email || 'Operador';
+      document.body.style.display = 'block';
+
+      await bootstrapUserExperience();
+      window.startForegroundNotifications();
+
+      window.firestoreSync.onEventsFeedChange((events) => {
+        allEvents = events;
+        renderEvents();
+        document.getElementById('conn').textContent = '✓ Online';
+      }, 20);
+
+      window.firestoreSync.onAlertsChange((alerts) => {
+        const openAlerts = alerts.filter(isAlertOpen);
+
+        if (openAlerts.length > lastAlertCount && lastAlertCount !== 0) {
+          notifyLocal('Novo alerta operacional detectado.');
+        }
+
+        lastAlertCount = openAlerts.length;
+        activeAlerts = openAlerts;
+        renderAlerts();
+        updateKPIs();
+      }, 100);
+
+      window.firestoreSync.onCamerasChange((items) => {
+        document.getElementById('kpiCams').textContent = items.length;
+      });
+
+      window.firestoreSync.onMonitoringChange((items) => {
+        document.getElementById('kpiMon').textContent = items.length;
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      showInstallBanner();
+    });
+
+    window.addEventListener('appinstalled', async () => {
+      deferredInstallPrompt = null;
+      localStorage.setItem('plateeye_install_banner_dismissed', '1');
+      await showNotificationPermissionModal();
+    });
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = './login.html';
+        return;
+      }
+      initDashboard(user);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeModal();
+        closeSidebar();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Câmeras</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+  <script src="./firestore-sync.js"></script>
+</head>
+<body style="display:none">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>
+          <h1>PlateEye</h1>
+          <p id="userEmail">—</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+  <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+  <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+  <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+  <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+  <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+  <a href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+  <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+  <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+</nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" type="button" onclick="toggleSidebar()"><span>☰</span></button>
+          <div>
+            <h2>Câmeras</h2>
+            <div class="subtle">Inventário e edição operacional</div>
+          </div>
+        </div>
+        <div class="right">
+          <button id="conn" class="pill">Conectando...</button>
+        </div>
+      </header>
+
+      <div class="dashboard-shell">
+        <section class="card pad" style="margin-bottom:14px;">
+          <div class="stats-grid">
+            <div class="card kpi teal">
+              <div class="label">Total</div>
+              <div id="camTotal" class="value">0</div>
+              <div class="chip">Inventário</div>
+            </div>
+
+            <div class="card kpi">
+              <div class="label">Ativas</div>
+              <div id="camActive" class="value">0</div>
+              <div class="chip">Operação</div>
+            </div>
+
+            <div class="card kpi mag">
+              <div class="label">Inativas</div>
+              <div id="camInactive" class="value">0</div>
+              <div class="chip">Atenção</div>
+            </div>
+
+            <div class="card kpi">
+              <div class="label">Com Código</div>
+              <div id="camCode" class="value">0</div>
+              <div class="chip">Integração</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card pad" style="margin-bottom:14px;">
+          <div class="section-head">
+            <div>
+              <h3>Editar câmera</h3>
+              <div class="subtle">Selecione um item na tabela e ajuste os parâmetros operacionais</div>
+            </div>
+          </div>
+
+          <form id="cameraForm" class="form-grid">
+            <input id="editId" type="hidden"/>
+
+            <div class="filters-grid">
+              <input id="editName" class="input" type="text" placeholder="Nome"/>
+              <input id="editIp" class="input" type="text" placeholder="IP"/>
+              <input id="editHelios" class="input" type="text" placeholder="Código Helios"/>
+              <input id="editEdgeId" class="input" type="number" placeholder="Edge Camera ID"/>
+            </div>
+
+            <div class="filters-grid">
+              <select id="editActive">
+                <option value="true">Ativa</option>
+                <option value="false">Inativa</option>
+              </select>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn primary" type="submit">Salvar alterações</button>
+              <button class="btn secondary" type="button" onclick="clearCameraForm()">Limpar</button>
+            </div>
+          </form>
+
+          <div id="cameraStatus" class="helper-text" style="margin-top:12px;">
+            Nenhuma câmera selecionada.
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="section-head">
+            <div>
+              <h3>Inventário</h3>
+              <div class="subtle">Clique em editar para carregar os campos no formulário</div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Helios</th>
+                  <th>IP</th>
+                  <th>Edge ID</th>
+                  <th>Status</th>
+                  <th>Atualização</th>
+                  <th>Ação</th>
+                </tr>
+              </thead>
+              <tbody id="cameraTableBody">
+                <tr><td colspan="7">Aguardando dados...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let cameraItems = [];
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '—';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function parseDate(value) {
+      if (!value) return null;
+      try {
+        if (typeof value?.toDate === 'function') return value.toDate();
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+      } catch {
+        return null;
+      }
+    }
+
+    function formatDateTime(value) {
+      const d = parseDate(value);
+      if (!d) return '—';
+      return d.toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short'
+      });
+    }
+
+    function renderCameras(items) {
+      cameraItems = items;
+      const body = document.getElementById('cameraTableBody');
+
+      document.getElementById('camTotal').textContent = items.length;
+      document.getElementById('camActive').textContent = items.filter((item) => item.is_active === true).length;
+      document.getElementById('camInactive').textContent = items.filter((item) => item.is_active !== true).length;
+      document.getElementById('camCode').textContent = items.filter((item) => item.helios_cam_code).length;
+
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="7">Nenhuma câmera encontrada.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = items.map((item) => `
+        <tr>
+          <td>${escapeHtml(item.name || 'Sem nome')}</td>
+          <td>${escapeHtml(item.helios_cam_code || '—')}</td>
+          <td>${escapeHtml(item.ip_address || '—')}</td>
+          <td>${escapeHtml(item.edge_camera_id ?? '—')}</td>
+          <td>${item.is_active
+            ? '<span class="tag ok"><span class="dot"></span>ATIVA</span>'
+            : '<span class="tag alert"><span class="dot"></span>INATIVA</span>'}</td>
+          <td>${escapeHtml(formatDateTime(item.cloud_updated_at))}</td>
+          <td><button class="btn secondary" type="button" onclick="loadCameraForEdit('${item.id}')">Editar</button></td>
+        </tr>
+      `).join('');
+    }
+
+    function loadCameraForEdit(id) {
+      const item = cameraItems.find((camera) => camera.id === id);
+      if (!item) return;
+
+      document.getElementById('editId').value = item.id;
+      document.getElementById('editName').value = item.name || '';
+      document.getElementById('editIp').value = item.ip_address || '';
+      document.getElementById('editHelios').value = item.helios_cam_code || '';
+      document.getElementById('editEdgeId').value = item.edge_camera_id ?? '';
+      document.getElementById('editActive').value = String(item.is_active === true);
+      document.getElementById('cameraStatus').textContent = `Editando câmera: ${item.name || item.id}`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function clearCameraForm() {
+      document.getElementById('editId').value = '';
+      document.getElementById('editName').value = '';
+      document.getElementById('editIp').value = '';
+      document.getElementById('editHelios').value = '';
+      document.getElementById('editEdgeId').value = '';
+      document.getElementById('editActive').value = 'true';
+      document.getElementById('cameraStatus').textContent = 'Nenhuma câmera selecionada.';
+    }
+
+    async function saveCamera(event) {
+      event.preventDefault();
+
+      const id = document.getElementById('editId').value.trim();
+      if (!id) {
+        document.getElementById('cameraStatus').textContent = 'Selecione uma câmera antes de salvar.';
+        return;
+      }
+
+      const payload = {
+        name: document.getElementById('editName').value.trim(),
+        ip_address: document.getElementById('editIp').value.trim(),
+        helios_cam_code: document.getElementById('editHelios').value.trim(),
+        edge_camera_id: Number(document.getElementById('editEdgeId').value || 0),
+        is_active: document.getElementById('editActive').value === 'true',
+        cloud_updated_at: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      try {
+        await window.db.collection('cameras').doc(id).set(payload, { merge: true });
+        document.getElementById('cameraStatus').textContent = 'Câmera atualizada com sucesso.';
+      } catch (error) {
+        console.error('[Cameras] Erro ao salvar:', error);
+        document.getElementById('cameraStatus').textContent = 'Falha ao salvar câmera.';
+      }
+    }
+
+    async function initPage(user) {
+      document.getElementById('userEmail').textContent = user.email || 'Operador';
+      document.body.style.display = 'block';
+
+      await window.requestPushPermissionAndToken();
+      window.startForegroundNotifications();
+
+      window.firestoreSync.onCamerasChange((items) => {
+        renderCameras(items);
+        document.getElementById('conn').textContent = '✓ Online';
+      });
+
+      document.getElementById('cameraForm').addEventListener('submit', saveCamera);
+    }
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = './login.html';
+        return;
+      }
+      initPage(user);
+    });
+  </script>
+</body>
+</html>

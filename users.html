@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Usuários</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+</head>
+<body style="display:none">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>
+          <h1>PlateEye</h1>
+          <p id="userEmail">—</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+        <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+        <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+        <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+        <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+        <a class="active" href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+        <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+        <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" type="button" onclick="toggleSidebar()"><span>☰</span></button>
+          <div>
+            <h2>Usuários e Permissões</h2>
+            <div class="subtle">Provisionamento de acesso e controle por menu</div>
+          </div>
+        </div>
+        <div class="right">
+          <button id="conn" class="pill">Conectando...</button>
+        </div>
+      </header>
+
+      <div class="dashboard-shell">
+        <section class="card pad" style="margin-bottom:14px;">
+          <div class="section-head">
+            <div>
+              <h3>Cadastrar / Editar Usuário</h3>
+              <div class="subtle">Defina identidade, status e matriz de permissão por tela</div>
+            </div>
+          </div>
+
+          <form id="userForm" class="form-grid">
+            <input id="editUserId" type="hidden"/>
+
+            <div class="filters-grid">
+              <input id="userName" class="input" type="text" placeholder="Nome completo" required />
+              <input id="userEmailInput" class="input" type="email" placeholder="E-mail" required />
+              <input id="userPassword" class="input" type="text" placeholder="Senha inicial / temporária" />
+              <select id="userRole">
+                <option value="operador">Operador</option>
+                <option value="supervisor">Supervisor</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+
+            <div class="filters-grid">
+              <select id="userActive">
+                <option value="true">Ativo</option>
+                <option value="false">Inativo</option>
+              </select>
+            </div>
+
+            <div class="card pad">
+              <div class="section-head">
+                <div>
+                  <h3>Permissões de Menu</h3>
+                  <div class="subtle">Marque exatamente as telas liberadas para o usuário</div>
+                </div>
+              </div>
+
+              <div class="filters-grid">
+                <label class="panel-item"><span class="title">Dashboard</span><input type="checkbox" class="menu-permission" value="dashboard"></label>
+                <label class="panel-item"><span class="title">Alertas</span><input type="checkbox" class="menu-permission" value="alerts"></label>
+                <label class="panel-item"><span class="title">Câmeras</span><input type="checkbox" class="menu-permission" value="cameras"></label>
+                <label class="panel-item"><span class="title">Monitoramento</span><input type="checkbox" class="menu-permission" value="monitoring"></label>
+                <label class="panel-item"><span class="title">Relatórios</span><input type="checkbox" class="menu-permission" value="reports"></label>
+                <label class="panel-item"><span class="title">Usuários</span><input type="checkbox" class="menu-permission" value="users"></label>
+                <label class="panel-item"><span class="title">Configurações</span><input type="checkbox" class="menu-permission" value="config"></label>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn primary" type="submit">Salvar usuário</button>
+              <button class="btn secondary" type="button" onclick="clearUserForm()">Limpar</button>
+            </div>
+          </form>
+
+          <div id="userStatus" class="helper-text" style="margin-top:12px;">
+            Nenhum usuário selecionado.
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="section-head">
+            <div>
+              <h3>Usuários cadastrados</h3>
+              <div class="subtle">Gerencie identidade, papel e escopo de acesso</div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>E-mail</th>
+                  <th>Papel</th>
+                  <th>Status</th>
+                  <th>Permissões</th>
+                  <th>Ação</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody">
+                <tr><td colspan="6">Aguardando dados...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let usersCache = [];
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '—';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getSelectedMenus() {
+      return [...document.querySelectorAll('.menu-permission:checked')].map((item) => item.value);
+    }
+
+    function setSelectedMenus(menus = []) {
+      document.querySelectorAll('.menu-permission').forEach((item) => {
+        item.checked = menus.includes(item.value);
+      });
+    }
+
+    function clearUserForm() {
+      document.getElementById('editUserId').value = '';
+      document.getElementById('userName').value = '';
+      document.getElementById('userEmailInput').value = '';
+      document.getElementById('userPassword').value = '';
+      document.getElementById('userRole').value = 'operador';
+      document.getElementById('userActive').value = 'true';
+      setSelectedMenus([]);
+      document.getElementById('userStatus').textContent = 'Nenhum usuário selecionado.';
+      document.getElementById('userPassword').style.display = 'block';
+      document.getElementById('userPassword').required = true;
+    }
+
+    function renderUsers(items) {
+      usersCache = items;
+      const body = document.getElementById('usersTableBody');
+
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="6">Nenhum usuário cadastrado.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = items.map((item) => {
+        const menus = Array.isArray(item.allowed_menus) ? item.allowed_menus.join(', ') : '—';
+        return `
+          <tr>
+            <td>${escapeHtml(item.name || '—')}</td>
+            <td>${escapeHtml(item.email || '—')}</td>
+            <td>${escapeHtml(item.role || 'operador')}</td>
+            <td>${item.is_active
+              ? '<span class="tag ok"><span class="dot"></span>ATIVO</span>'
+              : '<span class="tag alert"><span class="dot"></span>INATIVO</span>'}</td>
+            <td>${escapeHtml(menus)}</td>
+            <td><button class="btn secondary" type="button" onclick="editUser('${item.id}')">Editar</button></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function editUser(id) {
+      const user = usersCache.find((item) => item.id === id);
+      if (!user) return;
+
+      document.getElementById('editUserId').value = user.id;
+      document.getElementById('userName').value = user.name || '';
+      document.getElementById('userEmailInput').value = user.email || '';
+      document.getElementById('userPassword').value = '';
+      document.getElementById('userRole').value = user.role || 'operador';
+      document.getElementById('userActive').value = String(user.is_active !== false);
+      setSelectedMenus(user.allowed_menus || []);
+      document.getElementById('userStatus').textContent = `Editando usuário: ${user.name || user.email}`;
+      document.getElementById('userPassword').style.display = 'none';
+      document.getElementById('userPassword').required = false;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 1. Inicializa uma instância secundária para não afetar o login do Admin
+const secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
+const secondaryAuth = secondaryApp.auth();
+
+async function saveUser(event) {
+  event.preventDefault();
+
+  const btn = document.querySelector('#userForm button[type="submit"]');
+  const status = document.getElementById('userStatus');
+  const editUserId = document.getElementById('editUserId').value.trim();
+  
+  const name = document.getElementById('userName').value.trim();
+  const email = document.getElementById('userEmailInput').value.trim().toLowerCase();
+  const password = document.getElementById('userPassword').value.trim();
+  const role = document.getElementById('userRole').value;
+  const active = document.getElementById('userActive').value === 'true';
+  const allowedMenus = getSelectedMenus();
+
+  btn.disabled = true;
+  status.textContent = "Processando provisionamento...";
+
+  try {
+    // Se for um NOVO usuário, cria primeiro no Authentication
+    if (!editUserId) {
+      if (!password || password.length < 6) {
+        throw new Error("Defina uma senha de no mínimo 6 caracteres para novos usuários.");
+      }
+      
+      // Cria no Firebase Auth usando a instância secundária
+      const userCredential = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+      const uid = userCredential.user.uid;
+
+      // Salva no Firestore usando o UID real do Auth como ID do documento
+      await window.db.collection('users').doc(uid).set({
+        name,
+        email,
+        role,
+        is_active: active,
+        allowed_menus: allowedMenus,
+        created_at: firebase.firestore.FieldValue.serverTimestamp(),
+        updated_at: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      
+      // Desloga a instância secundária imediatamente para limpar memória
+      await secondaryAuth.signOut();
+      status.textContent = "Usuário criado no Auth e no Banco com sucesso!";
+    } else {
+      // Se for EDIÇÃO, apenas atualiza o Firestore
+      await window.db.collection('users').doc(editUserId).update({
+        name,
+        role,
+        is_active: active,
+        allowed_menus: allowedMenus,
+        updated_at: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      status.textContent = "Perfil atualizado com sucesso!";
+    }
+
+    clearUserForm();
+  } catch (error) {
+    console.error('[Provisionamento] Erro:', error);
+    status.textContent = "Erro: " + error.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+    function subscribeUsers() {
+      return window.db.collection('users').orderBy('name', 'asc').onSnapshot((snapshot) => {
+        const items = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        renderUsers(items);
+      }, (error) => {
+        console.error('[Users] Erro ao carregar usuários:', error);
+      });
+    }
+
+    async function initPage(user) {
+      document.getElementById('userEmail').textContent = user.email || 'Operador';
+      document.body.style.display = 'block';
+
+      await window.requestPushPermissionAndToken();
+      window.startForegroundNotifications();
+
+      subscribeUsers();
+      document.getElementById('userForm').addEventListener('submit', saveUser);
+      document.getElementById('conn').textContent = '✓ Online';
+    }
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = './login.html';
+        return;
+      }
+      initPage(user);
+    });
+  </script>
+</body>
+</html>

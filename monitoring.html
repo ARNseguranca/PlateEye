@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Monitoramento</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+  <script src="./firestore-sync.js"></script>
+
+  <style>
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      width: min(720px, 92vw);
+      background: #101a2b;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 38px;
+      height: 38px;
+      border: none;
+      border-radius: 50%;
+      background: #22A2FF;
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #A9B6D3;
+      margin-bottom: 6px;
+    }
+
+    .input-ui {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+    }
+
+    .input-ui:focus {
+      outline: none;
+      border-color: #22A2FF;
+      background: rgba(34, 162, 255, 0.05);
+    }
+
+    textarea.input-ui {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    .checkbox-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .checkbox-line input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-buttons .btn {
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body style="display:none">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>
+          <h1>PlateEye</h1>
+          <p id="userEmail">—</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+        <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+        <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+        <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+        <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+        <a href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+        <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+        <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" type="button" onclick="toggleSidebar()"><span>☰</span></button>
+          <div>
+            <h2>Monitoramento</h2>
+            <div class="subtle">Base sensível de placas e alvos monitorados</div>
+          </div>
+        </div>
+        <div class="right">
+          <button id="conn" class="pill">Conectando...</button>
+        </div>
+      </header>
+
+      <div class="dashboard-shell">
+        <section class="card pad" style="margin-bottom:14px;">
+          <div class="stats-grid">
+            <div class="card kpi">
+              <div class="label">Total</div>
+              <div id="monTotal" class="value">0</div>
+              <div class="chip">Cadastros</div>
+            </div>
+
+            <div class="card kpi teal">
+              <div class="label">Ativos</div>
+              <div id="monActive" class="value">0</div>
+              <div class="chip">Vigilância</div>
+            </div>
+
+            <div class="card kpi mag">
+              <div class="label">Alta Prioridade</div>
+              <div id="monPriority" class="value">0</div>
+              <div class="chip">Tratamento</div>
+            </div>
+
+            <div class="card kpi">
+              <div class="label">Categorias</div>
+              <div id="monCategories" class="value">0</div>
+              <div class="chip">Classificação</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="section-head">
+            <div>
+              <h3>Lista Monitorada</h3>
+              <div class="subtle">Base operacional para correlação de alertas e alvos</div>
+            </div>
+            <div>
+              <button class="btn primary" type="button" onclick="openMonitoringModal()">Nova placa</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Placa</th>
+                  <th>Nome / Alvo</th>
+                  <th>Categoria</th>
+                  <th>Nota</th>
+                  <th>Status</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="monitoringTableBody">
+                <tr><td colspan="6">Aguardando dados...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="monitoringModal" class="modal-overlay" onclick="handleMonitoringModalBackdrop(event)">
+    <div class="modal-content">
+      <button type="button" class="modal-close" onclick="closeMonitoringModal()">✕</button>
+
+      <h3 id="monitoringModalTitle" style="margin-bottom:14px;">Nova placa monitorada</h3>
+
+      <form id="monitoringForm" class="form-grid">
+        <input type="hidden" id="monitoringDocId"/>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="monPlate">Placa</label>
+            <input id="monPlate" class="input-ui" type="text" placeholder="ABC1D23" required />
+          </div>
+
+          <div class="form-group">
+            <label for="monName">Nome / Alvo</label>
+            <input id="monName" class="input-ui" type="text" placeholder="Nome do alvo" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="monCategory">Categoria</label>
+            <input id="monCategory" class="input-ui" type="text" placeholder="Suspeito, VIP, Interesse..." />
+          </div>
+
+          <div class="form-group">
+            <label for="monPriorityField">Prioridade</label>
+            <select id="monPriorityField" class="input-ui">
+              <option value="">Selecione</option>
+              <option value="baixa">Baixa</option>
+              <option value="media">Média</option>
+              <option value="alta">Alta</option>
+              <option value="critical">Crítica</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="monNote">Nota</label>
+          <textarea id="monNote" class="input-ui" placeholder="Observação operacional"></textarea>
+        </div>
+
+        <div class="checkbox-line">
+          <input id="monActiveField" type="checkbox" checked />
+          <label for="monActiveField">Registro ativo</label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" onclick="closeMonitoringModal()">Cancelar</button>
+          <button type="submit" class="btn primary">Salvar registro</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let monitoringItems = [];
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    function logout() {
+      firebase.auth().signOut().then(() => {
+        window.location.href = './login.html';
+      });
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '—';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function normalizePlate(value) {
+      return String(value || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .trim();
+    }
+
+    function getStatusTag(item) {
+      const active = item.isActive === true || item.active === true || item.status === 'active';
+      return active
+        ? '<span class="tag ok"><span class="dot"></span>ATIVO</span>'
+        : '<span class="tag alert"><span class="dot"></span>INATIVO</span>';
+    }
+
+    function isHighPriority(item) {
+      const priority = String(item.priority || item.level || item.severity || '').toLowerCase();
+      return ['alta', 'high', 'critical', 'critica', 'crítica'].includes(priority);
+    }
+
+    function openMonitoringModal(item = null) {
+      document.getElementById('monitoringModal').classList.add('active');
+
+      if (item) {
+        document.getElementById('monitoringModalTitle').textContent = 'Editar placa monitorada';
+        document.getElementById('monitoringDocId').value = item.id || '';
+        document.getElementById('monPlate').value = item.plate || '';
+        document.getElementById('monName').value = item.name || item.target_name || item.owner || '';
+        document.getElementById('monCategory').value = item.category || item.type || item.group || '';
+        document.getElementById('monPriorityField').value = item.priority || item.level || item.severity || '';
+        document.getElementById('monNote').value = item.note || item.observation || item.description || '';
+        document.getElementById('monActiveField').checked = item.isActive === true || item.active === true || item.status === 'active';
+      } else {
+        document.getElementById('monitoringModalTitle').textContent = 'Nova placa monitorada';
+        document.getElementById('monitoringForm').reset();
+        document.getElementById('monitoringDocId').value = '';
+        document.getElementById('monActiveField').checked = true;
+      }
+    }
+
+    function closeMonitoringModal() {
+      document.getElementById('monitoringModal').classList.remove('active');
+    }
+
+    function handleMonitoringModalBackdrop(event) {
+      if (event.target.id === 'monitoringModal') {
+        closeMonitoringModal();
+      }
+    }
+
+    function renderMonitoring(items) {
+      monitoringItems = items;
+
+      const body = document.getElementById('monitoringTableBody');
+
+      document.getElementById('monTotal').textContent = items.length;
+      document.getElementById('monActive').textContent = items.filter((item) =>
+        item.isActive === true || item.active === true || item.status === 'active'
+      ).length;
+      document.getElementById('monPriority').textContent = items.filter(isHighPriority).length;
+      document.getElementById('monCategories').textContent = new Set(
+        items.map((item) => item.category || item.type || item.group).filter(Boolean)
+      ).size;
+
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="6">Nenhuma placa monitorada encontrada.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = items.map((item) => `
+        <tr>
+          <td>${escapeHtml(item.plate || 'Sem placa')}</td>
+          <td>${escapeHtml(item.name || item.target_name || item.owner || 'Não informado')}</td>
+          <td>${escapeHtml(item.category || item.type || item.group || 'Sem categoria')}</td>
+          <td>${escapeHtml(item.note || item.observation || item.description || '—')}</td>
+          <td>${getStatusTag(item)}</td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn secondary" type="button" onclick="editMonitoring('${item.id}')">Editar</button>
+              <button class="btn secondary" type="button" onclick="toggleMonitoringStatus('${item.id}')">Ativar/Inativar</button>
+              <button class="btn secondary" type="button" onclick="deleteMonitoring('${item.id}')">Excluir</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function editMonitoring(id) {
+      const item = monitoringItems.find((entry) => entry.id === id);
+      if (!item) return;
+      openMonitoringModal(item);
+    }
+
+    async function toggleMonitoringStatus(id) {
+      try {
+        const item = monitoringItems.find((entry) => entry.id === id);
+        if (!item) return;
+
+        const currentlyActive = item.isActive === true || item.active === true || item.status === 'active';
+
+        await window.db.collection('monitoring').doc(id).set({
+          active: !currentlyActive,
+          isActive: !currentlyActive,
+          status: !currentlyActive ? 'active' : 'inactive',
+          updated_at: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      } catch (error) {
+        console.error('[Monitoring] Erro ao alternar status:', error);
+        alert('Erro ao atualizar status.');
+      }
+    }
+
+    async function deleteMonitoring(id) {
+      const confirmed = confirm('Deseja realmente excluir esta placa monitorada?');
+      if (!confirmed) return;
+
+      try {
+        await window.db.collection('monitoring').doc(id).delete();
+      } catch (error) {
+        console.error('[Monitoring] Erro ao excluir registro:', error);
+        alert('Erro ao excluir registro.');
+      }
+    }
+
+    async function saveMonitoring(event) {
+      event.preventDefault();
+
+      try {
+        const docId = document.getElementById('monitoringDocId').value.trim();
+        const plate = normalizePlate(document.getElementById('monPlate').value);
+        const name = document.getElementById('monName').value.trim();
+        const category = document.getElementById('monCategory').value.trim();
+        const priority = document.getElementById('monPriorityField').value.trim();
+        const note = document.getElementById('monNote').value.trim();
+        const active = document.getElementById('monActiveField').checked;
+
+        if (!plate) {
+          alert('Informe a placa.');
+          return;
+        }
+
+        const payload = {
+          plate,
+          name,
+          category,
+          priority,
+          note,
+          active,
+          isActive: active,
+          status: active ? 'active' : 'inactive',
+          updated_at: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (docId) {
+          await window.db.collection('monitoring').doc(docId).set(payload, { merge: true });
+        } else {
+          payload.created_at = firebase.firestore.FieldValue.serverTimestamp();
+          await window.db.collection('monitoring').add(payload);
+        }
+
+        closeMonitoringModal();
+      } catch (error) {
+        console.error('[Monitoring] Erro ao salvar registro:', error);
+        alert('Erro ao salvar registro.');
+      }
+    }
+
+    async function initPage(user) {
+      document.getElementById('userEmail').textContent = user.email || 'Operador';
+      document.body.style.display = 'block';
+
+      await window.requestPushPermissionAndToken();
+      window.startForegroundNotifications();
+
+      window.firestoreSync.onMonitoringChange((items) => {
+        renderMonitoring(items);
+        document.getElementById('conn').textContent = '✓ Online';
+      });
+    }
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = './login.html';
+        return;
+      }
+      initPage(user);
+    });
+
+    document.getElementById('monitoringForm').addEventListener('submit', saveMonitoring);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeMonitoringModal();
+        closeSidebar();
+      }
+    });
+  </script>
+</body>
+</html>

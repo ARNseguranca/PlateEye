@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Login</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+
+  <style>
+    .login-page{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns:1fr;
+      background:
+        radial-gradient(700px 260px at 100% 0%, rgba(30,67,114,.22), transparent 60%),
+        radial-gradient(480px 220px at 0% 100%, rgba(230,178,60,.08), transparent 60%),
+        linear-gradient(180deg, #081019 0%, #09111C 100%);
+    }
+
+    .login-wrap{
+      min-height:100vh;
+      display:grid;
+      grid-template-columns:1fr;
+    }
+
+    .login-visual{
+      display:none;
+      position:relative;
+      overflow:hidden;
+      border-right:1px solid rgba(255,255,255,.05);
+      background:
+        linear-gradient(135deg, rgba(30,67,114,.30), rgba(9,17,28,.60)),
+        linear-gradient(180deg, #10233C 0%, #09111C 100%);
+    }
+
+    .login-visual::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(420px 220px at 20% 18%, rgba(230,178,60,.15), transparent 60%),
+        radial-gradient(520px 260px at 85% 12%, rgba(73,194,216,.12), transparent 60%);
+      pointer-events:none;
+    }
+
+    .visual-inner{
+      position:relative;
+      z-index:1;
+      height:100%;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      padding:42px;
+    }
+
+    .visual-top{
+      max-width:560px;
+    }
+
+    .visual-brand{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      margin-bottom:28px;
+    }
+
+    .visual-brand .brand-badge{
+      width:56px;
+      height:56px;
+      border-radius:18px;
+    }
+
+    .visual-brand h1{
+      margin:0;
+      font-size:22px;
+      font-weight:900;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+
+    .visual-brand p{
+      margin:4px 0 0 0;
+      color:var(--muted);
+      font-size:13px;
+    }
+
+    .visual-title{
+      margin:0;
+      font-size:42px;
+      line-height:1.02;
+      font-weight:900;
+      letter-spacing:-.04em;
+      max-width:520px;
+    }
+
+    .visual-subtitle{
+      margin-top:16px;
+      max-width:520px;
+      color:var(--muted);
+      font-size:15px;
+      line-height:1.6;
+    }
+
+    .visual-panels{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:14px;
+      max-width:700px;
+      margin-top:28px;
+    }
+
+    .visual-panel{
+      padding:16px;
+      border-radius:20px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.07);
+      box-shadow:var(--shadow-1);
+    }
+
+    .visual-panel .k{
+      color:var(--muted);
+      font-size:11px;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+    }
+
+    .visual-panel .v{
+      margin-top:8px;
+      font-size:28px;
+      font-weight:900;
+      letter-spacing:-.03em;
+      color:var(--text);
+    }
+
+    .visual-panel .d{
+      margin-top:6px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+    }
+
+    .visual-footer{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .visual-tag{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      min-height:34px;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.06);
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+
+    .visual-dot{
+      width:8px;
+      height:8px;
+      border-radius:50%;
+      background:var(--success);
+      box-shadow:0 0 0 6px rgba(47,196,141,.10);
+    }
+
+    .login-side{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px 16px;
+    }
+
+    .login-card-refined{
+      width:100%;
+      max-width:430px;
+      padding:22px;
+      border-radius:28px;
+      background:
+        linear-gradient(135deg, rgba(30,67,114,.14), rgba(230,178,60,.05)),
+        linear-gradient(180deg, rgba(19,34,52,.98), rgba(14,24,38,.98));
+      border:1px solid rgba(255,255,255,.07);
+      box-shadow:var(--shadow-3);
+    }
+
+    .login-head{
+      margin-bottom:20px;
+    }
+
+    .login-head .mini-brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      margin-bottom:18px;
+    }
+
+    .login-head .mini-brand .brand-badge{
+      width:44px;
+      height:44px;
+      border-radius:14px;
+    }
+
+    .login-head h2{
+      margin:0;
+      font-size:28px;
+      line-height:1.05;
+      font-weight:900;
+      letter-spacing:-.03em;
+    }
+
+    .login-head p{
+      margin:10px 0 0 0;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.5;
+    }
+
+    .login-form{
+      display:grid;
+      gap:14px;
+    }
+
+    .field{
+      display:grid;
+      gap:8px;
+    }
+
+    .field label{
+      color:var(--muted);
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.02em;
+    }
+
+    .input-wrap{
+      position:relative;
+    }
+
+    .input-wrap .input{
+      padding-right:46px;
+    }
+
+    .field-icon{
+      position:absolute;
+      top:50%;
+      right:14px;
+      transform:translateY(-50%);
+      color:var(--muted-2);
+      font-size:16px;
+      pointer-events:none;
+    }
+
+    .password-toggle{
+      position:absolute;
+      top:50%;
+      right:8px;
+      transform:translateY(-50%);
+      width:34px;
+      height:34px;
+      border:none;
+      border-radius:10px;
+      background:transparent;
+      color:var(--muted);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+    }
+
+    .login-actions{
+      display:grid;
+      gap:10px;
+      margin-top:4px;
+    }
+
+    .btn-login{
+      min-height:48px;
+      font-size:14px;
+      font-weight:900;
+      letter-spacing:.01em;
+    }
+
+    .login-status{
+      margin-top:14px;
+      min-height:20px;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+    }
+
+    .login-note{
+      margin-top:18px;
+      padding-top:14px;
+      border-top:1px solid rgba(255,255,255,.06);
+      color:var(--muted-2);
+      font-size:12px;
+      line-height:1.5;
+    }
+
+    .login-grid-info{
+      display:grid;
+      gap:10px;
+      margin-top:16px;
+    }
+
+    .login-info-box{
+      padding:12px 14px;
+      border-radius:16px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.05);
+    }
+
+    .login-info-box strong{
+      display:block;
+      font-size:12px;
+      margin-bottom:4px;
+      color:var(--text);
+    }
+
+    .login-info-box span{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+    }
+
+    @media (min-width:1100px){
+      .login-wrap{
+        grid-template-columns:minmax(0, 1.2fr) minmax(420px, 480px);
+      }
+
+      .login-visual{
+        display:block;
+      }
+
+      .login-side{
+        padding:32px;
+      }
+
+      .login-card-refined{
+        max-width:460px;
+      }
+    }
+  </style>
+</head>
+<body style="display:none">
+  <main class="login-page">
+    <div class="login-wrap">
+      <section class="login-visual">
+        <div class="visual-inner">
+          <div class="visual-top">
+            <div class="visual-brand">
+              <div class="brand-badge"></div>
+              <div>
+                <h1>PlateEye</h1>
+                <p>Monitoramento LPR • Zecure</p>
+              </div>
+            </div>
+
+            <h2 class="visual-title">Centro de comando para operação patrimonial em tempo real</h2>
+            <p class="visual-subtitle">
+              Plataforma voltada para correlação de eventos, tratamento de alertas,
+              rastreabilidade operacional e resposta tática sobre infraestrutura LPR.
+            </p>
+
+            <div class="visual-panels">
+              <div class="visual-panel">
+                <div class="k">Camada</div>
+                <div class="v">LPR</div>
+                <div class="d">Captura, correlação e rastreabilidade de placas em ambiente operacional.</div>
+              </div>
+
+              <div class="visual-panel">
+                <div class="k">Cobertura</div>
+                <div class="v">24/7</div>
+                <div class="d">Acompanhamento contínuo com push, evidência visual e trilha de resposta.</div>
+              </div>
+
+              <div class="visual-panel">
+                <div class="k">Resposta</div>
+                <div class="v">Tempo real</div>
+                <div class="d">Tratamento imediato de eventos monitorados e ocorrências críticas.</div>
+              </div>
+
+              <div class="visual-panel">
+                <div class="k">Uso</div>
+                <div class="v">Mobile first</div>
+                <div class="d">Interface otimizada para operação em campo e supervisão tática.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-footer">
+            <div class="visual-tag"><span class="visual-dot"></span> Ambiente operacional protegido</div>
+            <div class="visual-tag">Push em segundo plano</div>
+            <div class="visual-tag">Integração Firebase</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="login-side">
+        <div class="login-card-refined">
+          <div class="login-head">
+            <div class="mini-brand">
+              <div class="brand-badge"></div>
+              <div>
+                <strong style="display:block;font-size:15px;letter-spacing:.04em;text-transform:uppercase;">PlateEye</strong>
+                <span style="color:var(--muted);font-size:12px;">Acesso operacional</span>
+              </div>
+            </div>
+
+            <h2>Entrar na plataforma</h2>
+            <p>
+              Autentique seu usuário para acessar dashboard, alertas, relatórios,
+              câmeras e base monitorada.
+            </p>
+          </div>
+
+          <form id="loginForm" class="login-form">
+            <div class="field">
+              <label for="email">E-mail</label>
+              <div class="input-wrap">
+                <input id="email" class="input" type="email" placeholder="seuemail@empresa.com" autocomplete="email" required />
+                <span class="field-icon">✉</span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="password">Senha</label>
+              <div class="input-wrap">
+                <input id="password" class="input" type="password" placeholder="Digite sua senha" autocomplete="current-password" required />
+                <button class="password-toggle" type="button" id="togglePassword" aria-label="Mostrar senha">◉</button>
+              </div>
+            </div>
+
+            <div class="login-actions">
+              <button id="loginBtn" type="submit" class="btn primary btn-login">Acessar ambiente</button>
+            </div>
+          </form>
+
+          <div id="loginStatus" class="login-status">Autenticação segura.</div>
+
+          <div class="login-grid-info">
+            <div class="login-info-box">
+              <strong>Sessão segura</strong>
+              <span>Controle de acesso com autenticação centralizada e persistência de sessão.</span>
+            </div>
+
+            <div class="login-info-box">
+              <strong>Push e dispositivo</strong>
+              <span>Após o login, o sistema registra o dispositivo para notificação operacional.</span>
+            </div>
+          </div>
+
+          <div class="login-note">
+            Uso restrito a operadores, supervisores e gestores autorizados.
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    window.ensureAuth();
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        window.location.href = './index.html';
+      } else {
+        document.body.style.display = 'block';
+      }
+    });
+
+    const form = document.getElementById('loginForm');
+    const loginBtn = document.getElementById('loginBtn');
+    const loginStatus = document.getElementById('loginStatus');
+    const passwordInput = document.getElementById('password');
+    const togglePassword = document.getElementById('togglePassword');
+
+    togglePassword.addEventListener('click', () => {
+      const isPassword = passwordInput.type === 'password';
+      passwordInput.type = isPassword ? 'text' : 'password';
+      togglePassword.textContent = isPassword ? '◐' : '◉';
+      togglePassword.setAttribute('aria-label', isPassword ? 'Ocultar senha' : 'Mostrar senha');
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const email = document.getElementById('email').value.trim();
+      const password = passwordInput.value;
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Validando acesso...';
+      loginStatus.textContent = 'Autenticando credenciais do operador...';
+
+      try {
+        await window.plateEyeAuth.login(email, password);
+        loginStatus.textContent = 'Acesso liberado. Redirecionando...';
+        window.location.href = './index.html';
+      } catch (error) {
+        console.error('[Login] Erro:', error);
+
+        let message = 'Falha ao autenticar.';
+        if (error.code === 'auth/invalid-login-credentials') message = 'Credenciais inválidas.';
+        if (error.code === 'auth/user-not-found') message = 'Usuário não encontrado.';
+        if (error.code === 'auth/wrong-password') message = 'Senha incorreta.';
+        if (error.code === 'auth/too-many-requests') message = 'Muitas tentativas. Aguarde e tente novamente.';
+        if (error.code === 'auth/network-request-failed') message = 'Falha de rede. Verifique sua conexão.';
+
+        loginStatus.textContent = message;
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Acessar ambiente';
+      }
+    });
+  </script>
+</body>
+</html>

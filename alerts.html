@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+  <meta name="theme-color" content="#E6B23C"/>
+  <link rel="manifest" href="./manifest.json"/>
+  <title>PlateEye - Alertas</title>
+  <link rel="stylesheet" href="./premium.css"/>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script src="./firebaseRegistro.js"></script>
+  <script src="./firestore-sync.js"></script>
+</head>
+<body style="display:none">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-badge"></div>
+        <div>
+          <h1>PlateEye</h1>
+          <p id="userEmail">—</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+  <a href="./index.html"><span class="ico">▣</span><span>Dashboard</span></a>
+  <a href="./alerts.html"><span class="ico">🚨</span><span>Alertas</span></a>
+  <a href="./cameras.html"><span class="ico">📷</span><span>Câmeras</span></a>
+  <a href="./monitoring.html"><span class="ico">◎</span><span>Monitoramento</span></a>
+  <a href="./reports.html"><span class="ico">≋</span><span>Relatórios</span></a>
+  <a href="./users.html"><span class="ico">👤</span><span>Usuários</span></a>
+  <a href="./config.html"><span class="ico">⚙</span><span>Configurações</span></a>
+  <a href="#" onclick="logout()"><span class="ico">🚪</span><span>Sair</span></a>
+</nav>
+    </aside>
+
+    <main class="content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" type="button" onclick="toggleSidebar()"><span>☰</span></button>
+          <div>
+            <h2>Central de Alertas</h2>
+            <div class="subtle">Fila crítica para resposta imediata</div>
+          </div>
+        </div>
+        <div class="right">
+          <button id="conn" class="pill">Conectando...</button>
+        </div>
+      </header>
+
+      <div class="dashboard-shell">
+        <section class="card pad" style="margin-bottom:14px;">
+          <div class="stats-grid">
+            <div class="card kpi mag">
+              <div class="label">Abertos</div>
+              <div id="kpiOpen" class="value">0</div>
+              <div class="chip">Tratamento</div>
+            </div>
+
+            <div class="card kpi">
+              <div class="label">Atualização</div>
+              <div id="kpiUpdated" class="value" style="font-size:18px;">—</div>
+              <div class="chip">-</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="section-head">
+            <div>
+              <h3>Painel de Ocorrências</h3>
+              <div class="subtle">Alertas abertos com evidência visual e metadados</div>
+            </div>
+          </div>
+
+          <div id="alertGrid" class="alert-grid">
+            <div class="empty-state">Aguardando alertas...</div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="imgModal" class="modal-img" onclick="handleModalBackdrop(event)">
+    <button class="close-btn" type="button" onclick="closeModal()">✕</button>
+    <img id="modalImg" src="" alt="Visualização do alerta"/>
+  </div>
+
+  <script>
+    let alertsData = [];
+    let lastAlertCount = 0;
+    const siren = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebarOverlay').classList.toggle('open');
+    }
+
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '—';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function parseDate(value) {
+      if (!value) return null;
+      try {
+        if (typeof value?.toDate === 'function') return value.toDate();
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+      } catch {
+        return null;
+      }
+    }
+
+    function formatDateTime(value) {
+      const d = parseDate(value);
+      if (!d) return '—';
+      return d.toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'medium'
+      });
+    }
+
+    function isAlertOpen(item) {
+      if (typeof item.isRead !== 'undefined') return item.isRead === false;
+      if (typeof item.is_read !== 'undefined') return item.is_read === false;
+      return true;
+    }
+
+    function openModal(url) {
+      if (!url) return;
+      document.getElementById('modalImg').src = url;
+      document.getElementById('imgModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('imgModal').classList.remove('active');
+      document.getElementById('modalImg').src = '';
+    }
+
+    function handleModalBackdrop(event) {
+      if (event.target.id === 'imgModal') closeModal();
+    }
+
+    function triggerAlertFeedback() {
+      if (Notification.permission === 'granted') {
+        new Notification('PlateEye', {
+          body: 'Novo alerta operacional recebido.',
+          icon: './icon-192.png'
+        });
+      }
+      siren.play().catch(() => {});
+    }
+
+    async function markRead(id) {
+      try {
+        await window.firestoreSync.markAlertAsRead(id);
+      } catch (error) {
+        console.error('[Alert] Erro ao marcar leitura:', error);
+      }
+    }
+
+    function renderAlerts() {
+      const grid = document.getElementById('alertGrid');
+      const openAlerts = alertsData.filter(isAlertOpen);
+
+      document.getElementById('kpiOpen').textContent = openAlerts.length;
+      document.getElementById('kpiUpdated').textContent = new Date().toLocaleTimeString('pt-BR');
+
+      if (!openAlerts.length) {
+        grid.innerHTML = '<div class="empty-state">Nenhum alerta aberto no momento.</div>';
+        return;
+      }
+
+      grid.innerHTML = openAlerts.map((item) => {
+        const imageUrl = item.image_url || item.imageUrl || '';
+        const plate = escapeHtml(item.plate || 'Sem placa');
+        const camera = escapeHtml(item.camera_name || item.cameraName || 'Não informada');
+        const note = escapeHtml(item.note || 'Ocorrência monitorada');
+        const when = escapeHtml(formatDateTime(item.captured_at || item.cloud_created_at));
+
+        return `
+          <article class="alert-card">
+            ${imageUrl
+              ? `<img src="${imageUrl}" alt="Alerta ${plate}" onclick="openModal('${imageUrl}')">`
+              : `<div class="empty-state" style="height:190px;display:flex;align-items:center;justify-content:center;">Sem imagem</div>`}
+            <div class="plate">${plate}</div>
+            <div class="info">📍 ${camera}</div>
+            <div class="info">🕒 ${when}</div>
+            <div class="info">📝 ${note}</div>
+            <div class="event-actions" style="margin-top:10px;">
+              ${imageUrl ? `<button class="btn secondary" onclick="openModal('${imageUrl}')">Abrir evidência</button>` : ''}
+              <button class="btn primary" onclick="markRead('${item.id}')">Finalizar alerta</button>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
+    async function initPage(user) {
+      document.getElementById('userEmail').textContent = user.email || 'Operador';
+      document.body.style.display = 'block';
+
+      await window.requestPushPermissionAndToken();
+      window.startForegroundNotifications();
+
+      window.firestoreSync.onAlertsChange((items) => {
+        const openCount = items.filter(isAlertOpen).length;
+
+        if (openCount > lastAlertCount && lastAlertCount !== 0) {
+          triggerAlertFeedback();
+        }
+
+        lastAlertCount = openCount;
+        alertsData = items;
+        renderAlerts();
+        document.getElementById('conn').textContent = '✓ Online';
+      });
+    }
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (!user) {
+        window.location.href = './login.html';
+        return;
+      }
+      initPage(user);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        closeModal();
+        closeSidebar();
+      }
+    });
+  </script>
+</body>
+</html>
