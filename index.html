@@ -329,7 +329,7 @@
       const status = document.getElementById('todayStatus');
 
       btn.disabled = true;
-      btn.textContent = 'Atualizando...';
+      btn.textContent = '↻';
       status.textContent = 'Consultando eventos do dia...';
 
       try {
@@ -341,7 +341,7 @@
         status.textContent = 'Falha ao atualizar o KPI diário';
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Atualizar';
+        btn.textContent = '↻';
         isUpdatingToday = false;
       }
     }
